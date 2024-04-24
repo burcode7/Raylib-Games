@@ -38,3 +38,6 @@ void DrawPoly(Vector2 center, int sides, float radius, float rotation, Color col
 **Rectangle collision:**
 ```c++
 CheckCollisionCircleRec(Vector2 center, float radius, Rectangle rec);
+```
+
+Game made with Programming With Nicks tutorial!
