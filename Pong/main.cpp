@@ -1,30 +1,45 @@
 #include <iostream>
 #include <raylib.h>
 
+
 using namespace std;
 
 Color Green = Color{38, 200, 154, 255};
 Color Dark_Green = Color{20, 190, 133, 255};
 Color Light_Green = Color{129, 224, 184, 255};
 Color Yellow = Color{243, 213, 91, 255};
+Color Menu_Color = Color{100, 255, 154, 255};
+
+bool gamePaused = false;
+Vector2 mousePoint = { 0.0f, 0.0f };
+
+
 
 int player_score = 0;
 int cpu_score = 0;
+
+
+typedef enum GameScreen { TITLE = 0, GAMEPLAY, PAUSED, ENDING, SETTINGS } GameScreen;
+
+GameScreen currentScreen;
+
 
 // Initializes the ball object
 class Ball
 {
     // Public variables for the ball
     public:
+    
     float x, y;
     int speed_x, speed_y;
     int radius;
+    
     
     // Function to draw the ball
     void Draw()
     {
 
-        DrawCircle(x, y, radius, Yellow);
+        DrawCircle(x, y, radius, WHITE);
 
     }
 
@@ -35,23 +50,28 @@ class Ball
         x += speed_x;
         y += speed_y;
 
-        
+        Sound ballFX = LoadSound("sfx/ball.wav");
+        Sound playerPoint = LoadSound("sfx/playerpoint.wav");
+        Sound enemyPoint = LoadSound("sfx/enemypoint.wav");
 
         // Checks if the ball Y is touching the top or bottom of the screen
 
         if(y + radius >= GetScreenHeight() || y - radius <= 0)
         {
             speed_y *= -1;
+            PlaySound(ballFX);
         }
 
 
         if (x + radius >= GetScreenWidth()) // Cpu wins a point
         {
             cpu_score++;
+            PlaySound(enemyPoint);
             ResetBall();
-        }
-        if(x - radius <= 0)
+        } 
+        if(x - radius <= 0) // Player point
         {
+            PlaySound(playerPoint);
             player_score++;
             ResetBall();
         }
@@ -154,11 +174,51 @@ int main()
     cout << "Starting the game" << endl;
     const int screen_width = 1280;
     const int screen_height = 800;
-    int rectangle_height = 120;
+
+    
+
     // Initializes the window with the arguments (width, height, title)
     InitWindow(screen_width, screen_height, "Pong");
+    InitAudioDevice();
+    
+    
+    SetExitKey(KEY_NULL);
     // Sets the FPS the game wants to run at
     SetTargetFPS(60);
+
+    // Loads settings screen
+    Texture2D settingsImage = LoadTexture("assets/settings.png");
+    Vector2 settingsCenter = { float(settingsImage.width / 2), float(settingsImage.height / 2) };
+
+    // Initialize the play button
+    Texture2D pause = LoadTexture("assets/playRect.png");
+    float pauseHeight = (float)pause.height;
+    Rectangle pauseRec = { 0, 0, (float)pause.width, pauseHeight };
+    Rectangle pauseBounds = { 380, 490, (float)pause.width, (float)pause.height };
+
+    int pauseState = 0;               // Button state: 0-NORMAL, 1-MOUSE_HOVER, 2-PRESSED
+    bool pauseAction = false;
+
+    // Initialize the settings button
+    Texture2D settings = LoadTexture("assets/settingsRect.png");
+    float settingsHeight = (float)settings.height;
+    Rectangle settingsRect = { 0, 0, (float)settings.width, settingsHeight };
+    Rectangle settingsBounds = { 400, 670, (float)settings.width, (float)settings.height };
+
+    int settingsState = 0;               // Button state: 0-NORMAL, 1-MOUSE_HOVER, 2-PRESSED
+    bool settingsAction = false;
+
+    // Initialize Quit button
+    Texture2D quit = LoadTexture("assets/settingsRect.png");
+    float quitHeight = (float)quit.height;
+    Rectangle quitRect = { 0, 0, (float)quit.width, quitHeight };
+    Rectangle quitBounds = { 650, 670, (float)quit.width, (float)quit.height };
+
+    int quitState = 0;               // Button state: 0-NORMAL, 1-MOUSE_HOVER, 2-PRESSED
+    bool quitAction = false;
+
+    int rectangle_height = 120;
+    
 
     ball.radius = 20;
     ball.x = screen_width / 2;
@@ -178,64 +238,295 @@ int main()
     cpu.y = screen_height / 2 - cpu.height / 2;
     cpu.speed = 6;
 
+    Texture exitBack = LoadTexture("assets/exit.png");
+    Rectangle exitRectangle = {0, 0, float(exitBack.width), float(exitBack.height) };
+    Rectangle exitHitbox = {0, 0, float(exitBack.width/6), float(exitBack.height/6) };
+    Vector2 exitCenter = { 0, 0 };
+    int exitState = 0;               // Button state: 0-NORMAL, 1-MOUSE_HOVER, 2-PRESSED
+    bool exitAction = false;
+
+    
+
+    
+
     
     /*
         WindowShouldClose() checks if the close button was clicked.
         This loop runs as long as it has not been touched.
     */
-    while(WindowShouldClose() == false)
-    {
-        // ******DRAWS THE OBJECTS******
 
+    Texture background = LoadTexture("assets/Gameplay.png");
+    Texture titleScreen = LoadTexture("assets/titlescreen.png");
+    Texture pauseImage = LoadTexture("assets/pause.png");
+
+    Sound buttonSFX = LoadSound("sfx/button.wav");
+    Sound ballFX = LoadSound("sfx/ball.wav");
+
+    // Intiialize pause button
+
+    Rectangle pauseButtonRec = {0, 0, (float)pauseImage.width, pauseImage.height };
+    Rectangle pauseButtonBounds = { screen_width/2 - pauseImage.width/2, screen_height/2 - pauseImage.height/1.9 };
+
+    int pauseButtonState = 0;
+    bool pauseButtonAction = false;
+
+    float PauseButtonX = screen_width/2 - pauseImage.width/2;
+    float PauseButtonY = screen_height/2 - pauseImage.height/1.9;
+    
+    currentScreen = TITLE;
+    
+    Rectangle pauseButtonHitbox = {PauseButtonX, PauseButtonY, pauseImage.width, pauseImage.height};
+
+    while(!WindowShouldClose())
+    {
         // Creates a blank canvas we can draw the game on
         BeginDrawing();
-
-        // Updating the objects
-        ball.Update();
-        player.Update();
-        // Fills the parameter ball_y with ball.y to give it a value to follow
-        cpu.Update(ball.y);
+        
+        mousePoint = GetMousePosition();
+        pauseAction = false;
 
         
-
-        // Clears the screen
-        ClearBackground(Dark_Green);
-        DrawRectangle(screen_width/2, 0, screen_width/2, screen_height, Green);
-        DrawCircle(screen_width/2, screen_height/2, 150, Light_Green);
-
-        // Draws a text with the parameters: (text, xpos, ypos, fontsize, color)
-        // TextFormat("%i" converts something to text)
-        DrawText(TextFormat("%i",cpu_score), screen_width/4, 20, 80, WHITE);
-        DrawText(TextFormat("%i",player_score), 3 * screen_width/4, 20, 80, WHITE);
-
-        // Checking for collisions with both paddles
-        if(CheckCollisionCircleRec(Vector2{ball.x, ball.y}, ball.radius, Rectangle{player.x, player.y, player.width, player.height}))
+        switch(currentScreen)
         {
-            ball.speed_x *= -1;
+            case TITLE:
+
+                ClearBackground(RAYWHITE);
+                DrawTexture(titleScreen, 0, 0, WHITE);
+
+                // Check play button state
+                if (CheckCollisionPointRec(mousePoint, pauseBounds))
+                {
+                    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT))
+                    {
+                        pauseState = 2;
+                    } 
+                    else 
+                    {
+                        pauseState = 1;
+                    }
+                    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) 
+                    {
+                        pauseAction = true;
+                    }
+                }
+                else 
+                {
+                    pauseState = 0;
+                }
+                if (pauseAction)
+                {
+                    PlaySound(buttonSFX);
+                    currentScreen = GAMEPLAY;
+                    pauseAction = false;
+                }
+
+                // Check settings button state
+                if (CheckCollisionPointRec(mousePoint, settingsBounds))
+                {
+                    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT))
+                    {
+                        settingsState = 2;
+                    }
+                    else
+                    {
+                        settingsState = 1;
+                    } 
+
+                    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) 
+                    {
+                        settingsAction = true;
+                    }
+                }
+                else
+                {
+                    settingsState = 0;  
+                } 
+
+                if (settingsAction)
+                {
+                    PlaySound(buttonSFX);
+                    currentScreen = SETTINGS;
+                    settingsAction = false;
+                }
+
+                // Check quit button state
+                if (CheckCollisionPointRec(mousePoint, quitBounds))
+                {
+                    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) 
+                    {
+                        quitState = 2;
+                    }
+
+                    else
+                    {
+                         quitState = 1;
+                    }
+
+                    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) 
+                    {
+                        quitAction = true;
+                    }
+                }
+                else 
+                {
+                    quitState = 0;
+                }
+                if (quitAction)
+                {
+                    PlaySound(buttonSFX);
+                    WindowShouldClose();
+                    exit(0);
+                }
+
+
+            break;
+            case GAMEPLAY:
+                    
+                    pauseAction = false;
+
+                    if (IsKeyPressed(KEY_ESCAPE))
+                    {
+                        PlaySound(buttonSFX);
+                        gamePaused = !gamePaused;
+                        
+                    }
+
+                    if (!gamePaused)
+                    {
+                        ball.Update();
+                        player.Update();
+                        // Fills the parameter ball_y with ball.y to give it a value to follow
+                        cpu.Update(ball.y);
+
+                        // Checking for collisions with both paddles
+                        if(CheckCollisionCircleRec(Vector2{ball.x, ball.y}, ball.radius, Rectangle{player.x, player.y, player.width, player.height}))
+                        {
+                            ball.speed_x *= -1;
+                            PlaySound(ballFX);
+                        }
+                        if(CheckCollisionCircleRec(Vector2{ball.x, ball.y}, ball.radius, Rectangle{cpu.x, cpu.y, cpu.width, cpu.height}))
+                        {
+                            ball.speed_x *= -1;
+                            PlaySound(ballFX);
+                        }
+                    }
+                // Clears the gameplay screen
+                ClearBackground(RAYWHITE);
+                DrawTexture(background, 0, 0, WHITE);
+                        
+
+                // Draws a text with the parameters: (text, xpos, ypos, fontsize, color)
+                // TextFormat("%i" converts something to text)
+                DrawText(TextFormat("%i",cpu_score), screen_width/4, 20, 80, WHITE);
+                DrawText(TextFormat("%i",player_score), 3 * screen_width/4, 20, 80, WHITE);
+
+                ball.Draw();
+
+                player.Draw();
+
+                cpu.Draw();
+
+                if (gamePaused)
+                {
+                    DrawTexture(pauseImage, PauseButtonX, PauseButtonY, WHITE);
+                    pauseButtonAction = false;
+                    
+                    if (CheckCollisionPointRec(mousePoint, pauseButtonHitbox))
+                    {
+                        if (IsMouseButtonDown(MOUSE_BUTTON_LEFT))
+                        {
+                            pauseButtonState = 2;
+                        } 
+                        else 
+                        {
+                            pauseButtonState = 1;
+                        }
+                        if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) 
+                        {
+                            PlaySound(buttonSFX);
+                            gamePaused = false;
+                            
+                        }
+  
+                    }
+
+
+                    DrawTexturePro(exitBack,
+                    exitRectangle,
+                    (Rectangle) { 0, 0, exitRectangle.width/6, exitRectangle.height/6},
+                    exitCenter,
+                    0,
+                    WHITE);
+
+                    if (CheckCollisionPointRec(mousePoint, exitHitbox))
+                    {
+                        if (IsMouseButtonDown(MOUSE_BUTTON_LEFT))
+                        {
+                            exitState = 2;
+                        } 
+                        else 
+                        {
+                            exitState = 1;
+                        }
+                        if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) 
+                        {
+                            PlaySound(buttonSFX);
+                            gamePaused = false;
+                            currentScreen = TITLE;
+                        }
+  
+                    }
+                }
+                
+                break;
+            
+            case SETTINGS:
+                ClearBackground(WHITE);
+                DrawTexture(settingsImage, 0, 0, WHITE);
+                if (IsKeyPressed(KEY_ESCAPE))
+                {
+                    PlaySound(buttonSFX);
+                    currentScreen = TITLE;
+                }
+                DrawTexturePro(exitBack,
+                exitRectangle,
+                (Rectangle) { 0, 0, exitRectangle.width/6, exitRectangle.height/6},
+                exitCenter,
+                0,
+                WHITE);
+                
+
+                if (CheckCollisionPointRec(mousePoint, exitHitbox))
+                {
+                    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT))
+                    {
+                        exitState = 2;
+                    } 
+                    else 
+                    {
+                        exitState = 1;
+                    }
+                    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) 
+                    {
+                        PlaySound(buttonSFX);
+                        gamePaused = false;
+                        currentScreen = TITLE;
+                    }
+
+                }
+            break;    
+
         }
-        if(CheckCollisionCircleRec(Vector2{ball.x, ball.y}, ball.radius, Rectangle{cpu.x, cpu.y, cpu.width, cpu.height}))
-        {
-            ball.speed_x *= -1;
-        }
-
-        // Draws a line from the top of the screen to the bottom
-        DrawLine(screen_width/2, 0, screen_width/2, screen_height, WHITE);
-
-        // Draws the ball and player objects
-        ball.Draw();
-
-        player.Draw();
-
-        cpu.Draw();
-
         
-
         // Ends drawing the canvas
+        
         EndDrawing();
     }
 
     // Closes the window
+    UnloadTexture(titleScreen);
     CloseWindow();
 
     return 0;
-}
+    }
+        
