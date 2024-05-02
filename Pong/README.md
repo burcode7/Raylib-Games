@@ -40,4 +40,4 @@ void DrawPoly(Vector2 center, int sides, float radius, float rotation, Color col
 CheckCollisionCircleRec(Vector2 center, float radius, Rectangle rec);
 ```
 
-Game made with Programming With Nicks tutorial!
+Basic mechanics made with Programming With Nick's tutorial
